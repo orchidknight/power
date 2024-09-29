@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  server:
+    container_name: server
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    environment:
+      SERVER_ADDRESS: ':8888'
+      SERVER_SHUTDOWN_TIMEOUT: '1000'
+      SERVER_HASHCASH_TTL: '10000'
+      SERVER_ZERO_BITS_COUNT: '5'
+
+    ports:
+      - 8888:8888
+
+  client:
+    container_name: client
+    build:
+      context: .
+      dockerfile: docker/client.Dockerfile
+    environment:
+      CLIENT_SERVER_ADDRESS: 'server:8888'
+      CLIENT_MAX_TRIES: '10000000'
+    depends_on:
+      - server       
