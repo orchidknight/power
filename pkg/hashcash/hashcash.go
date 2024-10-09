@@ -145,6 +145,10 @@ func (h *HashCash) String() string {
 	)
 }
 
+func (h *HashCash) Key() string {
+	return fmt.Sprintf("%s:%s:%s", h.date.Format(timeFormat), h.senderData, base64.StdEncoding.EncodeToString(h.randomSeed))
+}
+
 func (h *HashCash) Validate() (bool, error) {
 	hash, err := h.Hash()
 	if err != nil {

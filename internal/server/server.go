@@ -32,7 +32,7 @@ type Server struct {
 	ZeroBits        int
 	hashCashTTL     time.Duration
 	connTTL         time.Duration
-	clientPool      *ClientPool
+	hashCashPool    *hashcash.HashCashPool
 
 	log logger.Logger
 }
@@ -47,7 +47,7 @@ func NewServer(cfg *config.ServerConfig, wc WisdomCache, log logger.Logger) *Ser
 		ZeroBits:        cfg.ZeroBits,
 		shutdown:        make(chan struct{}),
 		shutdownTimeout: time.Duration(cfg.ShutdownTimeout) * time.Millisecond,
-		clientPool:      NewClientPool(),
+		hashCashPool:    hashcash.NewHashCashPool(),
 	}
 }
 
@@ -115,14 +115,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	clientID := conn.RemoteAddr().String()
 
-	s.clientPool.AddClient(clientID)
-
 	err = s.handleMessages(clientID, conn)
 	if err != nil {
 		s.log.Error(srv, "handleMessages: %v", err)
 	}
-
-	s.clientPool.RemoveClient(clientID)
 }
 
 func (s *Server) handleMessages(clientID string, conn io.ReadWriter) error {
@@ -170,6 +166,8 @@ func (s *Server) responseTask(clientID string, conn io.Writer) error {
 		Payload: hc.String(),
 	}
 
+	s.hashCashPool.AddHashCash(hc)
+
 	s.writeMessage(msg, conn)
 	s.log.Info(srv, "Sent task %s", msg.Payload)
 
@@ -185,9 +183,16 @@ func (s *Server) responseWisdom(clientID string, payload string, conn io.Writer)
 		return fmt.Errorf("NewHashCashFromString: %v", err)
 	}
 
-	if !hc.CheckSender(clientID) || !s.clientPool.HasClient(clientID) {
+	if !hc.CheckSender(clientID) {
 		s.writeError(ErrClientNotFound, conn)
 		return nil
+	}
+
+	internalHC, ok := s.hashCashPool.GetHashCash(hc.Key())
+	if !ok {
+		s.writeError(ErrClientNotFound, conn)
+	} else {
+		s.hashCashPool.RemoveHashCash(internalHC)
 	}
 
 	if hc.Expired(s.hashCashTTL) {
